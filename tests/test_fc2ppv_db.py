@@ -391,6 +391,39 @@ class VideoEdgeFixtureTests(unittest.TestCase):
         self.assertEqual(performer["images"], [performer["image"]])
 
 
+class DescriptionTests(unittest.TestCase):
+    """The site's description block is appended below the duration in details."""
+
+    def test_4856210_duration_then_description(self):
+        scene = fc2ppv_db.parse_video_page(
+            fixture("video-4856210.html"),
+            "https://fc2ppv-db.com/en/videos/4856210",
+        )
+        self.assertEqual(scene["code"], "FC2-PPV-4856210")
+        details = scene["details"]
+        self.assertTrue(details.startswith("Duration: 59:36\n\n"))
+        self.assertIn(
+            "★過去二作はこちら★\n"
+            "女〇アナに内定の大型新人!!モデル並みのスタイルと男をコロがす最強のあざと可愛い逸材♡"
+            "たった一度の過ち映像を期間限定大公開!!",
+            details,
+        )
+
+    def test_multiline_description_preserved(self):
+        scene = fc2ppv_db.parse_video_page(fixture("video-4985048.html"), VIDEO_URL)
+        details = scene["details"]
+        self.assertTrue(details.startswith("Duration: 1:25:35\n\n"))
+        self.assertIn("今回お会いしたのは、なのちゃん(18)です。", details)
+        self.assertIn("\n", details.split("\n\n", 1)[1])
+
+    def test_4548515_has_no_details(self):
+        scene = fc2ppv_db.parse_video_page(
+            fixture("video-4548515.html"),
+            "https://fc2ppv-db.com/en/videos/4548515",
+        )
+        self.assertNotIn("details", scene)
+
+
 class SceneFragmentTests(unittest.TestCase):
     def test_resolves_from_file_path(self):
         html = fixture("video-4971389.html")

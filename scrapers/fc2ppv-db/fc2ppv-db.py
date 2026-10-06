@@ -216,6 +216,7 @@ class _VideoPageParser(HTMLParser):
         self.canonical = None
         self.meta_description = None
         self.paragraphs = []
+        self.description = ""
         self.anchors = []
         self.images = []
         self._h1_parts = []
@@ -224,6 +225,7 @@ class _VideoPageParser(HTMLParser):
         self._in_title = False
         self._in_p = False
         self._p_parts = []
+        self._p_class = ""
         self._anchor = None
         self._anchor_parts = []
         self._anchor_images = []
@@ -247,6 +249,7 @@ class _VideoPageParser(HTMLParser):
         elif tag == "p":
             self._in_p = True
             self._p_parts = []
+            self._p_class = attrs.get("class") or ""
         elif tag == "a":
             self._anchor = attrs.get("href") or ""
             self._anchor_parts = []
@@ -292,8 +295,12 @@ class _VideoPageParser(HTMLParser):
             self.title = "".join(self._title_parts).strip()
         elif tag == "p" and self._in_p:
             self._in_p = False
-            self.paragraphs.append("".join(self._p_parts).strip())
+            text = "".join(self._p_parts).strip()
+            self.paragraphs.append(text)
+            if "whitespace-pre-wrap" in self._p_class:
+                self.description = text
             self._p_parts = []
+            self._p_class = ""
         elif tag == "span":
             if self._span_stack:
                 span = self._span_stack.pop()
@@ -417,10 +424,16 @@ def parse_video_page(html, page_url):
     else:
         scene["urls"] = [page_url]
 
+    detail_parts = []
     if parser.meta_description:
         match = META_DURATION_RE.search(parser.meta_description)
         if match:
-            scene["details"] = "Duration: {0}".format(match.group(1))
+            detail_parts.append("Duration: {0}".format(match.group(1)))
+    description = parser.description.strip()
+    if description:
+        detail_parts.append(description)
+    if detail_parts:
+        scene["details"] = "\n\n".join(detail_parts)
 
     performers = []
     for anchor in parser.anchors:
