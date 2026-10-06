@@ -29,6 +29,12 @@ performerByURL:
       - python
       - fc2ppv-db.py
       - performer-by-url
+performerByName:
+  action: script
+  script:
+    - python
+    - fc2ppv-db.py
+    - performer-by-name
 sceneByFragment:
   action: script
   script:

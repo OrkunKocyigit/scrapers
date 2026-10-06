@@ -526,6 +526,56 @@ class SceneNameTests(unittest.TestCase):
         self.assertEqual(fc2ppv_db.scene_by_name({"name": "   "}), [])
 
 
+class PerformerSearchTests(unittest.TestCase):
+    """performer-by-name reads the actress search results page."""
+
+    def test_parse_fixture(self):
+        results = fc2ppv_db.parse_performer_search_results(
+            fixture("actress-search.html")
+        )
+        urls = [result["url"] for result in results]
+        self.assertGreaterEqual(len(results), 20)
+        self.assertEqual(len(urls), len(set(urls)))
+        first = results[0]
+        self.assertEqual(first["name"], "えりか")
+        self.assertEqual(
+            first["url"],
+            "https://fc2ppv-db.com/en/actresses/6ea8c948-da15-4f16-b445-43fb05b3cc69",
+        )
+        self.assertTrue(
+            first["image"].endswith(
+                "/faces/actress_6ea8c948-da15-4f16-b445-43fb05b3cc69.jpg"
+            )
+        )
+        self.assertEqual(first["images"], [first["image"]])
+        without_image = next(
+            result
+            for result in results
+            if "63bc576f-fda5-11f0-ad20-aad14526765e" in result["url"]
+        )
+        self.assertNotIn("image", without_image)
+
+    def test_search_path_queries_site(self):
+        html = fixture("actress-search.html")
+        with mock.patch.object(fc2ppv_db, "fetch_html", return_value=html) as fetch:
+            results = fc2ppv_db.performer_by_name({"name": "えりか"})
+        fetch.assert_called_once_with(
+            "https://fc2ppv-db.com/en/actresses?view=all&q="
+            + urllib.parse.quote_plus("えりか")
+            + "&page=1"
+        )
+        self.assertTrue(results)
+
+    def test_empty_name_returns_empty_list(self):
+        guard = mock.patch.object(
+            fc2ppv_db,
+            "fetch_html",
+            side_effect=AssertionError("fetch_html must not be called"),
+        )
+        with guard:
+            self.assertEqual(fc2ppv_db.performer_by_name({"name": "  "}), [])
+
+
 class PerformerTests(unittest.TestCase):
     def _fetch_performer(self, fixture_name, url):
         html = fixture(fixture_name)
@@ -654,6 +704,7 @@ class YmlConfigTests(unittest.TestCase):
         for key in (
             "sceneByURL",
             "performerByURL",
+            "performerByName",
             "sceneByFragment",
             "sceneByQueryFragment",
             "sceneByName",
@@ -672,6 +723,7 @@ class YmlConfigTests(unittest.TestCase):
             "sceneByFragment",
             "sceneByQueryFragment",
             "sceneByName",
+            "performerByName",
             "performerByFragment",
         ):
             self.assertRegex(self.text, r"(?m)^" + key + r":\n  action: script\n")
@@ -684,6 +736,7 @@ class YmlConfigTests(unittest.TestCase):
             "scene-by-name": "scene-by-name",
             "performer-by-url": "performer-by-url",
             "performer-by-fragment": "performer-by-fragment",
+            "performer-by-name": "performer-by-name",
         }
         for operation in pairs.values():
             self.assertRegex(

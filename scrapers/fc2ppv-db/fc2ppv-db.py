@@ -566,6 +566,90 @@ def scene_by_name(payload):
     return parse_search_results(html)
 
 
+class _PerformerSearchParser(HTMLParser):
+    """Collect actress search result cards (href + h3 name + face image)."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.anchors = []
+        self._anchor = None
+        self._h3_parts = []
+        self._in_h3 = False
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == "a":
+            self._anchor = {
+                "href": attrs.get("href") or "",
+                "name": "",
+                "images": [],
+            }
+        elif tag == "h3" and self._anchor is not None:
+            self._in_h3 = True
+            self._h3_parts = []
+        elif tag == "img" and self._anchor is not None:
+            self._anchor["images"].append(attrs.get("src") or "")
+
+    def handle_startendtag(self, tag, attrs):
+        self.handle_starttag(tag, attrs)
+
+    def handle_data(self, data):
+        if self._in_h3:
+            self._h3_parts.append(data)
+
+    def handle_endtag(self, tag):
+        if tag == "h3" and self._in_h3:
+            self._in_h3 = False
+            if self._anchor is not None:
+                self._anchor["name"] = "".join(self._h3_parts).strip()
+        elif tag == "a" and self._anchor is not None:
+            self.anchors.append(self._anchor)
+            self._anchor = None
+
+
+def parse_performer_search_results(html):
+    """Map an actress search page to Stash performerByName candidates."""
+    parser = _PerformerSearchParser()
+    parser.feed(html or "")
+    parser.close()
+    results = []
+    seen = set()
+    for anchor in parser.anchors:
+        actress_uuid = extract_actress_uuid(anchor["href"])
+        if not actress_uuid or actress_uuid in seen or not anchor["name"]:
+            continue
+        seen.add(actress_uuid)
+        result = {
+            "name": anchor["name"],
+            "url": "{0}/en/actresses/{1}".format(SITE_BASE, actress_uuid),
+        }
+        image = next(
+            (
+                src.split("?", 1)[0]
+                for src in anchor["images"]
+                if "/faces/actress_" in src
+            ),
+            "",
+        )
+        if image:
+            result["image"] = image
+            result["images"] = [image]
+        results.append(result)
+    return results
+
+
+def performer_by_name(payload):
+    """Stash ``performer-by-name``: candidates from the actress search page."""
+    name = ((payload or {}).get("name") or "").strip()
+    if not name:
+        return []
+    query = urllib.parse.quote_plus(name)
+    html = fetch_html(
+        "{0}/en/actresses?view=all&q={1}&page=1".format(SITE_BASE, query)
+    )
+    return parse_performer_search_results(html)
+
+
 class _ActressPageParser(HTMLParser):
     """Collect the DOM pieces that :func:`parse_actress_page` needs."""
 
@@ -723,6 +807,7 @@ OPERATIONS = {
     "scene-by-name": scene_by_name,
     "performer-by-url": performer_by_url,
     "performer-by-fragment": performer_by_fragment,
+    "performer-by-name": performer_by_name,
 }
 
 

@@ -19,7 +19,8 @@ site sits behind Cloudflare and an age verification wall.
 | Scrape with query fragment | `scene-by-query-fragment` | Same as `scene-by-fragment`. |
 | Scene by name / search | `scene-by-name` | Parses `/en/search?q=` results into `{title, url}` candidates. A name that already contains an FC2 id returns a single candidate without any network fetch. |
 | Scrape with URL (performer) | `performer-by-url` | Reads an actress page (`/en|ja|zh/actresses/{uuid}`) and returns name, URL and face image from the page's JSON-LD `Person` block (H1 fallback). |
-| Scrape (performer fragment) | `performer-by-fragment` | Delegates to `performer-by-url` when the fragment carries a `url` (or `urls[0]`). The site has no performer name search, so a fragment without a URL exits with an error. |
+| Performer search | `performer-by-name` | Queries the actress search (`/en/actresses?view=all&q=`) and returns `{name, url, image}` candidates from the first page of matches. |
+| Scrape (performer fragment) | `performer-by-fragment` | Delegates to `performer-by-url` when the fragment carries a `url` (or `urls[0]`); a fragment without a URL exits with an error — use the performer search to find her first. |
 
 ## Requirements
 
@@ -92,8 +93,8 @@ published scraper zip.
 
 ## Limitations
 
-- **No performer name search.** fc2ppv-db.com has no actress search page, so
-  `performer-by-fragment` only works when the fragment carries a URL.
+- **Actress search returns the first page.** `performer-by-name` reads up to the first
+  page (~24 matches) of the actress search; refine the query if the performer is missing.
 - **No bio, birthdate or aliases.** The site does not expose them; the scraper does not
   invent fields.
 - **No tags.** The site has no tag links.
