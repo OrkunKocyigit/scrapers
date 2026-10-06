@@ -38,7 +38,7 @@ This repository is shaped as a Stash scraper source, so installation is:
    index is reachable at:
 
    ```
-   https://<username>.github.io/<repo>/main/index.yml
+   https://orkunkocyigit.github.io/scrapers/main/index.yml
    ```
 
 4. In Stash: **Settings → Metadata Providers → Add Source**, give it a name and paste that
