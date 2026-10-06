@@ -661,11 +661,28 @@ class YmlConfigTests(unittest.TestCase):
     def test_url_filters(self):
         self.assertRegex(
             self.text,
-            r"(?m)^sceneByURL:\n  - action: script\n    url: fc2ppv-db\.com\n",
+            r"(?m)^sceneByURL:\n  - action: script\n    url:\n      - fc2ppv-db\.com\n",
         )
         for locale in ("en", "ja", "zh"):
             self.assertIn(
-                "    url: fc2ppv-db.com/{0}/actresses/".format(locale), self.text
+                "      - fc2ppv-db.com/{0}/actresses/".format(locale), self.text
+            )
+
+    def test_every_url_key_is_a_list(self):
+        """Stash unmarshals `url` into []string — a scalar breaks scraper load."""
+        url_indices = [
+            index
+            for index, line in enumerate(self.lines)
+            if line.strip().startswith("url:")
+        ]
+        self.assertGreaterEqual(len(url_indices), 4)
+        for index in url_indices:
+            line = self.lines[index]
+            self.assertEqual(line.strip(), "url:", line)
+            self.assertTrue(
+                index + 1 < len(self.lines)
+                and self.lines[index + 1].lstrip().startswith("- "),
+                "url: at line {0} must be followed by a list item".format(index + 1),
             )
 
     def test_no_tags_or_driver_sections(self):
@@ -683,6 +700,9 @@ class YmlPyYamlTests(unittest.TestCase):
         self.assertIsInstance(data["performerByURL"], list)
         self.assertEqual(data["sceneByURL"][0]["action"], "script")
         self.assertEqual(data["sceneByURL"][0]["script"][-1], "scene-by-url")
+        for entry in data["sceneByURL"] + data["performerByURL"]:
+            self.assertIsInstance(entry["url"], list)
+            self.assertTrue(all(isinstance(u, str) for u in entry["url"]))
         for entry in data["performerByURL"]:
             self.assertEqual(entry["action"], "script")
             self.assertEqual(entry["script"][-1], "performer-by-url")
