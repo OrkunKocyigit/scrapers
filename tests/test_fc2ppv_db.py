@@ -418,6 +418,19 @@ class ConfigTests(unittest.TestCase):
                         "http://localhost:8191/v1",
                     )
 
+    def test_ini_percent_value_is_literal(self):
+        """configparser must not interpolate %-escapes in INI values."""
+        with tempfile.TemporaryDirectory() as tmp:
+            ini = self._write_ini(
+                tmp, "flaresolverr_url = http://host:8191/v1?token=a%3Db\n"
+            )
+            with mock.patch.object(fc2ppv_db, "INI_PATH", ini):
+                with mock.patch.dict(os.environ, {}, clear=True):
+                    self.assertEqual(
+                        fc2ppv_db.load_flaresolverr_url(),
+                        "http://host:8191/v1?token=a%3Db",
+                    )
+
     def test_session_name_env_wins_over_ini(self):
         with tempfile.TemporaryDirectory() as tmp:
             ini = self._write_ini(tmp, "session_name = from-ini\n")

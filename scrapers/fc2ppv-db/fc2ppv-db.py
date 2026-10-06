@@ -66,11 +66,11 @@ def _read_ini_value(path, key):
         text = path.read_text(encoding="utf-8")
     except OSError:
         return None
-    parser = configparser.ConfigParser()
+    parser = configparser.ConfigParser(interpolation=None)
     try:
         parser.read_string(text)
     except configparser.Error:
-        parser = configparser.ConfigParser()
+        parser = configparser.ConfigParser(interpolation=None)
         try:
             parser.read_string("[DEFAULT]\n" + text)
         except configparser.Error:
