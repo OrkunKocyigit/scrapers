@@ -25,6 +25,9 @@ from pathlib import Path
 SITE_BASE = "https://fc2ppv-db.com"
 ALLOWED_HOSTS = ("fc2ppv-db.com", "www.fc2ppv-db.com")
 DEFAULT_FLARESOLVERR_URL = "http://localhost:8191/v1"
+DEFAULT_SESSION_NAME = "fc2ppv-db"
+DEFAULT_SESSION_TTL_MINUTES = 30
+SOLVER_TIMEOUT_SECONDS = 130
 INI_PATH = Path(__file__).with_name("fc2ppv-db.ini")
 
 VIDEO_PATH_RE = re.compile(r"/videos/(\d{5,7})")
@@ -81,31 +84,50 @@ def _read_ini_value(path, key):
     return None
 
 
-def fetch_html(url):
-    """Fetch an fc2ppv-db.com page through FlareSolverr and return its HTML."""
-    parsed = urllib.parse.urlparse(url)
-    if parsed.scheme not in ("http", "https") or parsed.hostname not in ALLOWED_HOSTS:
-        raise ScraperError(
-            "refusing to fetch {0!r}: only http(s) URLs on {1} are allowed".format(
-                url, " or ".join(ALLOWED_HOSTS)
-            )
-        )
+def load_session_name():
+    """Resolve the FlareSolverr session name used to reuse the browser.
 
-    solver_url = load_flaresolverr_url()
-    body = json.dumps(
-        {
-            "cmd": "request.get",
-            "url": url,
-            "maxTimeout": 60000,
-            "cookies": [{"name": "age-verified", "value": "true"}],
-        }
-    ).encode("utf-8")
+    Precedence: ``FLARESOLVERR_SESSION`` env var, then ``session_name`` in the
+    INI file, then ``fc2ppv-db``. The literal value ``none`` disables session
+    reuse (returns an empty string) so every request uses a temporary browser.
+    """
+    value = os.environ.get("FLARESOLVERR_SESSION", "").strip()
+    if not value:
+        ini_value = _read_ini_value(INI_PATH, "session_name")
+        value = ini_value.strip() if ini_value else ""
+    if not value:
+        value = DEFAULT_SESSION_NAME
+    if value.lower() == "none":
+        return ""
+    return value
+
+
+def load_session_ttl_minutes():
+    """Resolve the session TTL in minutes (used for automatic rotation)."""
+    raw = os.environ.get("FLARESOLVERR_SESSION_TTL_MINUTES", "").strip()
+    if not raw:
+        ini_value = _read_ini_value(INI_PATH, "session_ttl_minutes")
+        raw = ini_value.strip() if ini_value else ""
+    if not raw:
+        return DEFAULT_SESSION_TTL_MINUTES
+    try:
+        value = int(raw)
+    except ValueError:
+        return DEFAULT_SESSION_TTL_MINUTES
+    return value if value > 0 else DEFAULT_SESSION_TTL_MINUTES
+
+
+def _solver_post(solver_url, payload):
+    """POST one JSON command to FlareSolverr and return the decoded response."""
+    body = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
         solver_url, data=body, headers={"Content-Type": "application/json"}
     )
     try:
-        with urllib.request.urlopen(request, timeout=130) as response:
-            payload = json.loads(response.read().decode("utf-8", "replace"))
+        with urllib.request.urlopen(
+            request, timeout=SOLVER_TIMEOUT_SECONDS
+        ) as response:
+            decoded = json.loads(response.read().decode("utf-8", "replace"))
     except urllib.error.HTTPError as exc:
         raise ScraperError(
             "FlareSolverr at {0} returned HTTP {1}".format(solver_url, exc.code)
@@ -124,15 +146,80 @@ def fetch_html(url):
                 solver_url, exc
             )
         ) from exc
-
-    if not isinstance(payload, dict):
+    if not isinstance(decoded, dict):
         raise ScraperError("FlareSolverr returned an unexpected response shape")
+    return decoded
 
-    if payload.get("status") != "ok":
-        message = payload.get("message") or "unknown error"
+
+def _solver_command(solver_url, payload):
+    """POST one command and raise when FlareSolverr reports a non-ok status."""
+    response = _solver_post(solver_url, payload)
+    if response.get("status") != "ok":
+        message = response.get("message") or "unknown error"
         raise ScraperError("FlareSolverr error: {0}".format(message))
+    return response
 
-    solution = payload.get("solution")
+
+def _ensure_session(solver_url, session_name):
+    """Idempotently create-or-reuse the named FlareSolverr session.
+
+    ``sessions.create`` returns the existing session when the name is already
+    active, so one call implements "reuse if active, create if not".
+    """
+    response = _solver_command(
+        solver_url, {"cmd": "sessions.create", "session": session_name}
+    )
+    return response.get("session") or session_name
+
+
+def fetch_html(url):
+    """Fetch an fc2ppv-db.com page through FlareSolverr and return its HTML."""
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ("http", "https") or parsed.hostname not in ALLOWED_HOSTS:
+        raise ScraperError(
+            "refusing to fetch {0!r}: only http(s) URLs on {1} are allowed".format(
+                url, " or ".join(ALLOWED_HOSTS)
+            )
+        )
+
+    solver_url = load_flaresolverr_url()
+    payload = {
+        "cmd": "request.get",
+        "url": url,
+        "maxTimeout": 60000,
+        "cookies": [{"name": "age-verified", "value": "true"}],
+    }
+
+    session_name = load_session_name()
+    if session_name:
+        try:
+            _ensure_session(solver_url, session_name)
+        except ScraperError:
+            # A solver without working session support must not break scraping.
+            session_name = ""
+        else:
+            payload["session"] = session_name
+            payload["session_ttl_minutes"] = load_session_ttl_minutes()
+
+    try:
+        response = _solver_command(solver_url, payload)
+    except ScraperError:
+        if "session" not in payload:
+            raise
+        # The shared session may be stale or busy; recreate it and retry once.
+        try:
+            _solver_command(
+                solver_url, {"cmd": "sessions.destroy", "session": session_name}
+            )
+        except ScraperError:
+            pass
+        try:
+            _ensure_session(solver_url, session_name)
+        except ScraperError:
+            pass
+        response = _solver_command(solver_url, payload)
+
+    solution = response.get("solution")
     if not isinstance(solution, dict):
         raise ScraperError("FlareSolverr returned no solution for {0}".format(url))
 

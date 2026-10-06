@@ -67,18 +67,39 @@ docker run -d --name flaresolverr -p 8191:8191 -e LOG_LEVEL=info --restart unles
 
 ## Configuration
 
-The FlareSolverr endpoint is resolved in this order:
+All settings are resolved in this order: environment variable, then the key in
+`fc2ppv-db.ini` placed **next to `fc2ppv-db.py`**, then the default.
 
-1. `FLARESOLVERR_URL` environment variable (highest precedence)
-2. `flaresolverr_url` in `fc2ppv-db.ini`, placed **next to `fc2ppv-db.py`**
-3. Default: `http://localhost:8191/v1`
+| Setting | Environment variable | INI key | Default |
+| --- | --- | --- | --- |
+| FlareSolverr endpoint | `FLARESOLVERR_URL` | `flaresolverr_url` | `http://localhost:8191/v1` |
+| Session name (browser reuse) | `FLARESOLVERR_SESSION` | `session_name` | `fc2ppv-db` |
+| Session TTL (minutes) | `FLARESOLVERR_SESSION_TTL_MINUTES` | `session_ttl_minutes` | `30` |
 
 Example `fc2ppv-db.ini`:
 
 ```ini
 [DEFAULT]
 flaresolverr_url = http://localhost:8191/v1
+session_name = fc2ppv-db
+session_ttl_minutes = 30
 ```
+
+### Session reuse
+
+The scraper reuses a named FlareSolverr session: `sessions.create` returns the
+existing session when it is already active, otherwise it launches one. The
+Cloudflare challenge is solved once per session lifetime instead of on every
+request (about 20s for the first scrape, ~6s for subsequent ones), and the
+`age-verified` cookie persists in the browser. Sessions rotate automatically
+after `session_ttl_minutes` of age, and a failed request recreates the session
+and retries once.
+
+Set `session_name = none` (or `FLARESOLVERR_SESSION=none`) to disable reuse so
+every request runs in a temporary browser. Note: FlareSolverr has no background
+cleanup, so the named session stays alive until it rotates on the next scrape or
+FlareSolverr restarts — destroy it manually with
+`{"cmd": "sessions.destroy", "session": "fc2ppv-db"}` if you want it gone sooner.
 
 ## Running the tests
 

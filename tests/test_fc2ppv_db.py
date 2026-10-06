@@ -66,6 +66,9 @@ class FetchHtmlTests(unittest.TestCase):
 
     def setUp(self):
         self.calls = []
+        env = mock.patch.dict(os.environ, {"FLARESOLVERR_SESSION": "none"})
+        env.start()
+        self.addCleanup(env.stop)
 
     def fake_urlopen(self, request, timeout=None):
         self.calls.append((request, timeout))
@@ -91,6 +94,8 @@ class FetchHtmlTests(unittest.TestCase):
         self.assertEqual(body["url"], VIDEO_URL)
         self.assertEqual(body["maxTimeout"], 60000)
         self.assertEqual(body["cookies"], [{"name": "age-verified", "value": "true"}])
+        self.assertNotIn("session", body)
+        self.assertNotIn("session_ttl_minutes", body)
 
     def test_solver_status_error_maps_to_scraper_error(self):
         payload = json.dumps(
@@ -164,6 +169,148 @@ class FetchHtmlTests(unittest.TestCase):
             with self.assertRaises(fc2ppv_db.ScraperError):
                 fc2ppv_db.fetch_html("https://evil.example.com/en/videos/1234567")
         self.assertEqual(self.calls, [])
+
+
+class SessionTests(unittest.TestCase):
+    """FlareSolverr session reuse: create-or-reuse, then retry once on failure."""
+
+    MISSING_INI = Path("does-not-exist.ini")
+
+    def setUp(self):
+        self.calls = []
+
+    def _fetch(self, fake_post):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            with mock.patch.object(fc2ppv_db, "INI_PATH", self.MISSING_INI):
+                with mock.patch.object(fc2ppv_db, "_solver_post", fake_post):
+                    return fc2ppv_db.fetch_html(VIDEO_URL)
+
+    def _ok_html(self):
+        return json.loads(
+            ok_envelope("<html><title>Fine</title></html>").decode("utf-8")
+        )
+
+    def _created(self, payload):
+        return {
+            "status": "ok",
+            "message": "Session created successfully.",
+            "session": payload.get("session"),
+        }
+
+    def test_create_then_get_with_session(self):
+        def fake_post(solver_url, payload):
+            self.calls.append(payload)
+            if payload["cmd"] == "sessions.create":
+                return self._created(payload)
+            return self._ok_html()
+
+        html = self._fetch(fake_post)
+        self.assertIn("Fine", html)
+        self.assertEqual(
+            [call["cmd"] for call in self.calls], ["sessions.create", "request.get"]
+        )
+        self.assertEqual(self.calls[0]["session"], "fc2ppv-db")
+        get = self.calls[1]
+        self.assertEqual(get["session"], "fc2ppv-db")
+        self.assertEqual(get["session_ttl_minutes"], 30)
+        self.assertEqual(get["cookies"], [{"name": "age-verified", "value": "true"}])
+
+    def test_existing_session_is_reused(self):
+        def fake_post(solver_url, payload):
+            self.calls.append(payload)
+            if payload["cmd"] == "sessions.create":
+                return {
+                    "status": "ok",
+                    "message": "Session already exists.",
+                    "session": payload.get("session"),
+                }
+            return self._ok_html()
+
+        html = self._fetch(fake_post)
+        self.assertIn("Fine", html)
+        self.assertEqual(
+            [call["cmd"] for call in self.calls], ["sessions.create", "request.get"]
+        )
+
+    def test_create_failure_falls_back_to_stateless(self):
+        def fake_post(solver_url, payload):
+            self.calls.append(payload)
+            if payload["cmd"] == "sessions.create":
+                raise fc2ppv_db.ScraperError("FlareSolverr error: no sessions")
+            return self._ok_html()
+
+        html = self._fetch(fake_post)
+        self.assertIn("Fine", html)
+        self.assertEqual(
+            [call["cmd"] for call in self.calls], ["sessions.create", "request.get"]
+        )
+        self.assertNotIn("session", self.calls[1])
+        self.assertNotIn("session_ttl_minutes", self.calls[1])
+
+    def test_get_failure_recreates_session_and_retries(self):
+        get_calls = []
+
+        def fake_post(solver_url, payload):
+            self.calls.append(payload)
+            if payload["cmd"] == "sessions.create":
+                return self._created(payload)
+            if payload["cmd"] == "sessions.destroy":
+                return {"status": "ok", "message": "The session has been removed."}
+            get_calls.append(payload)
+            if len(get_calls) == 1:
+                raise fc2ppv_db.ScraperError("FlareSolverr error: chrome not reachable")
+            return self._ok_html()
+
+        html = self._fetch(fake_post)
+        self.assertIn("Fine", html)
+        self.assertEqual(
+            [call["cmd"] for call in self.calls],
+            [
+                "sessions.create",
+                "request.get",
+                "sessions.destroy",
+                "sessions.create",
+                "request.get",
+            ],
+        )
+
+    def test_retry_exhausted_raises(self):
+        def fake_post(solver_url, payload):
+            self.calls.append(payload)
+            if payload["cmd"] == "sessions.create":
+                return self._created(payload)
+            if payload["cmd"] == "sessions.destroy":
+                return {"status": "ok", "message": "The session has been removed."}
+            raise fc2ppv_db.ScraperError("FlareSolverr error: still broken")
+
+        with self.assertRaises(fc2ppv_db.ScraperError) as ctx:
+            self._fetch(fake_post)
+        self.assertIn("still broken", str(ctx.exception))
+        self.assertEqual(
+            [call["cmd"] for call in self.calls],
+            [
+                "sessions.create",
+                "request.get",
+                "sessions.destroy",
+                "sessions.create",
+                "request.get",
+            ],
+        )
+
+    def test_sessions_disabled_via_env(self):
+        def fake_post(solver_url, payload):
+            self.calls.append(payload)
+            return self._ok_html()
+
+        with mock.patch.dict(
+            os.environ, {"FLARESOLVERR_SESSION": "none"}, clear=True
+        ):
+            with mock.patch.object(fc2ppv_db, "INI_PATH", self.MISSING_INI):
+                with mock.patch.object(fc2ppv_db, "_solver_post", fake_post):
+                    html = fc2ppv_db.fetch_html(VIDEO_URL)
+        self.assertIn("Fine", html)
+        self.assertEqual([call["cmd"] for call in self.calls], ["request.get"])
+        self.assertNotIn("session", self.calls[0])
 
 
 class AgeGateTests(unittest.TestCase):
@@ -242,6 +389,66 @@ class ConfigTests(unittest.TestCase):
                         fc2ppv_db.load_flaresolverr_url(),
                         "http://localhost:8191/v1",
                     )
+
+    def test_session_name_env_wins_over_ini(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ini = self._write_ini(tmp, "session_name = from-ini\n")
+            with mock.patch.object(fc2ppv_db, "INI_PATH", ini):
+                with mock.patch.dict(
+                    os.environ, {"FLARESOLVERR_SESSION": "from-env"}, clear=True
+                ):
+                    self.assertEqual(fc2ppv_db.load_session_name(), "from-env")
+
+    def test_session_name_from_ini(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ini = self._write_ini(tmp, "session_name = from-ini\n")
+            with mock.patch.object(fc2ppv_db, "INI_PATH", ini):
+                with mock.patch.dict(os.environ, {}, clear=True):
+                    self.assertEqual(fc2ppv_db.load_session_name(), "from-ini")
+
+    def test_session_name_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = Path(tmp) / "missing.ini"
+            with mock.patch.object(fc2ppv_db, "INI_PATH", missing):
+                with mock.patch.dict(os.environ, {}, clear=True):
+                    self.assertEqual(fc2ppv_db.load_session_name(), "fc2ppv-db")
+
+    def test_session_name_none_disables(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = Path(tmp) / "missing.ini"
+            with mock.patch.object(fc2ppv_db, "INI_PATH", missing):
+                with mock.patch.dict(
+                    os.environ, {"FLARESOLVERR_SESSION": "None"}, clear=True
+                ):
+                    self.assertEqual(fc2ppv_db.load_session_name(), "")
+
+    def test_session_ttl_default_and_parsing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = Path(tmp) / "missing.ini"
+            with mock.patch.object(fc2ppv_db, "INI_PATH", missing):
+                with mock.patch.dict(os.environ, {}, clear=True):
+                    self.assertEqual(fc2ppv_db.load_session_ttl_minutes(), 30)
+                with mock.patch.dict(
+                    os.environ, {"FLARESOLVERR_SESSION_TTL_MINUTES": "7"}, clear=True
+                ):
+                    self.assertEqual(fc2ppv_db.load_session_ttl_minutes(), 7)
+                with mock.patch.dict(
+                    os.environ,
+                    {"FLARESOLVERR_SESSION_TTL_MINUTES": "junk"},
+                    clear=True,
+                ):
+                    self.assertEqual(fc2ppv_db.load_session_ttl_minutes(), 30)
+                with mock.patch.dict(
+                    os.environ, {"FLARESOLVERR_SESSION_TTL_MINUTES": "0"}, clear=True
+                ):
+                    self.assertEqual(fc2ppv_db.load_session_ttl_minutes(), 30)
+
+    def test_session_ttl_from_ini(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ini = self._write_ini(tmp, "session_ttl_minutes = 12\n")
+            with mock.patch.object(fc2ppv_db, "INI_PATH", ini):
+                with mock.patch.dict(os.environ, {}, clear=True):
+                    self.assertEqual(fc2ppv_db.load_session_ttl_minutes(), 12)
 
 
 class ParseVideoPageTests(unittest.TestCase):
