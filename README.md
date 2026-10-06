@@ -15,7 +15,7 @@ site sits behind Cloudflare and an age verification wall.
 | Stash flow | Script operation | What it does |
 | --- | --- | --- |
 | Scrape with URL (scene) | `scene-by-url` | Reads a `fc2ppv-db.com/.../videos/{id}` URL and returns one scene: code `FC2-PPV-{id}`, title, release date, seller as studio, actresses as performers (with face image when the page has one), thumbnail, tags, `/en` URL, and details (duration followed by the site's description). |
-| Scrape (scene fragment) | `scene-by-fragment` | Resolves the FC2 id from the fragment's URLs, file paths or title and returns that video's metadata. Unresolvable fragments return `{}` instead of an error. |
+| Scrape (scene fragment) | `scene-by-fragment` | Resolves the FC2 id from the fragment's URLs, file paths or title and returns that video's metadata. Unresolvable fragments return no result (`null`) instead of an empty object. |
 | Scrape with query fragment | `scene-by-query-fragment` | Same as `scene-by-fragment`. |
 | Scene by name / search | `scene-by-name` | Parses `/en/search?q=` results into `{title, url}` candidates. A name that already contains an FC2 id returns a single candidate without any network fetch. |
 | Scrape with URL (performer) | `performer-by-url` | Reads an actress page (`/en|ja|zh/actresses/{uuid}`) and returns name, URL and face image from the page's JSON-LD `Person` block (H1 fallback). |

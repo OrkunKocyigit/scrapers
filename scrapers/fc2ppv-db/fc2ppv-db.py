@@ -613,11 +613,13 @@ def _fetch_scene(video_id):
 def scene_by_fragment(payload):
     """Stash ``scene-by-fragment`` / ``scene-by-query-fragment``.
 
-    Unresolvable fragments return an empty object instead of an error.
+    Unresolvable fragments return no result (``None``) instead of an empty
+    object: Stash opens the scrape dialog for an empty object, but reports
+    "no results" for a null one.
     """
     video_id = _resolve_video_id(payload or {})
     if not video_id:
-        return {}
+        return None
     return _fetch_scene(video_id)
 
 

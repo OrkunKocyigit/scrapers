@@ -725,15 +725,20 @@ class SceneFragmentTests(unittest.TestCase):
         fetch.assert_called_once_with("https://fc2ppv-db.com/en/videos/4971389")
         self.assertEqual(scene["code"], "FC2-PPV-4971389")
 
-    def test_no_id_returns_empty_dict_without_fetch(self):
+    def test_no_id_returns_none_without_fetch(self):
         guard = mock.patch.object(
             fc2ppv_db,
             "fetch_html",
             side_effect=AssertionError("fetch_html must not be called"),
         )
         with guard:
-            self.assertEqual(
-                fc2ppv_db.scene_by_fragment({"title": "nothing resolvable"}), {}
+            self.assertIsNone(
+                fc2ppv_db.scene_by_fragment({"title": "nothing resolvable"})
+            )
+            self.assertIsNone(
+                fc2ppv_db.scene_by_fragment(
+                    {"files": [{"path": r"C:\vids\Some.Movie.2024.mkv"}]}
+                )
             )
 
 
