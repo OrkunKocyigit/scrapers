@@ -241,6 +241,10 @@ def fetch_html(url):
             "fc2ppv-db.com returned the age verification page; "
             "the age-verified cookie was rejected"
         )
+    if is_not_found(html):
+        raise ScraperError(
+            "fc2ppv-db.com returned 404 (page not found) for {0}".format(url)
+        )
     return html
 
 
@@ -252,6 +256,16 @@ def is_age_gate(html, final_url):
     if match and "age verification" in match.group(1).lower():
         return True
     return "age-verify" in (final_url or "").lower()
+
+
+def is_not_found(html):
+    """True when the response is the site's 404 page.
+
+    FlareSolverr's Selenium driver cannot report the real HTTP status (it always
+    reports 200), so the not-found page has to be detected from its content. The
+    site renders ``<h1>404</h1>`` there, independent of locale.
+    """
+    return bool(re.search(r"<h1[^>]*>\s*404\s*</h1>", html or "", re.IGNORECASE))
 
 
 def extract_id_from_url(url):

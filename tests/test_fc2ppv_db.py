@@ -170,6 +170,20 @@ class FetchHtmlTests(unittest.TestCase):
                 fc2ppv_db.fetch_html("https://evil.example.com/en/videos/1234567")
         self.assertEqual(self.calls, [])
 
+    def test_not_found_page_maps_to_scraper_error(self):
+        payload = ok_envelope(
+            fixture("not-found.html"),
+            final_url="https://fc2ppv-db.com/en/videos/635598",
+        )
+        with mock.patch.object(
+            fc2ppv_db.urllib.request,
+            "urlopen",
+            lambda request, timeout=None: FakeResponse(payload),
+        ):
+            with self.assertRaises(fc2ppv_db.ScraperError) as ctx:
+                fc2ppv_db.fetch_html("https://fc2ppv-db.com/en/videos/635598")
+        self.assertIn("404", str(ctx.exception))
+
 
 class SessionTests(unittest.TestCase):
     """FlareSolverr session reuse: create-or-reuse, then retry once on failure."""
@@ -329,6 +343,19 @@ class AgeGateTests(unittest.TestCase):
         self.assertTrue(
             fc2ppv_db.is_age_gate("<html></html>", "https://fc2ppv-db.com/en/age-verify")
         )
+
+
+class NotFoundTests(unittest.TestCase):
+    def test_not_found_fixture_detected(self):
+        self.assertTrue(fc2ppv_db.is_not_found(fixture("not-found.html")))
+
+    def test_video_pages_are_not_flagged(self):
+        for name in (
+            "video-4985048.html",
+            "video-4548515.html",
+            "video-4986793.html",
+        ):
+            self.assertFalse(fc2ppv_db.is_not_found(fixture(name)), name)
 
 
 class ConfigTests(unittest.TestCase):
