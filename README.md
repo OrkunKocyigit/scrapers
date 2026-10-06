@@ -14,7 +14,7 @@ site sits behind Cloudflare and an age verification wall.
 
 | Stash flow | Script operation | What it does |
 | --- | --- | --- |
-| Scrape with URL (scene) | `scene-by-url` | Reads a `fc2ppv-db.com/.../videos/{id}` URL and returns one scene: code `FC2-PPV-{id}`, title, release date, seller as studio, actresses as performers (with face image when the page has one), thumbnail, `/en` URL, and details (duration followed by the site's description). |
+| Scrape with URL (scene) | `scene-by-url` | Reads a `fc2ppv-db.com/.../videos/{id}` URL and returns one scene: code `FC2-PPV-{id}`, title, release date, seller as studio, actresses as performers (with face image when the page has one), thumbnail, tags, `/en` URL, and details (duration followed by the site's description). |
 | Scrape (scene fragment) | `scene-by-fragment` | Resolves the FC2 id from the fragment's URLs, file paths or title and returns that video's metadata. Unresolvable fragments return `{}` instead of an error. |
 | Scrape with query fragment | `scene-by-query-fragment` | Same as `scene-by-fragment`. |
 | Scene by name / search | `scene-by-name` | Parses `/en/search?q=` results into `{title, url}` candidates. A name that already contains an FC2 id returns a single candidate without any network fetch. |
@@ -97,7 +97,8 @@ published scraper zip.
   page (~24 matches) of the actress search; refine the query if the performer is missing.
 - **No bio, birthdate or aliases.** The site does not expose them; the scraper does not
   invent fields.
-- **No tags.** The site has no tag links.
+- **Some videos have no tags.** The site shows tag pills only when a video has them;
+  older videos (e.g. `4548515`) return no `tags` key.
 - **Cloudflare ASN block (error 1005).** Some networks/networks' ASNs are blocked by
   Cloudflare; the scraper reports this clearly but cannot work around it.
 - **Links use the `/en` locale.** Canonical scene/actress URLs are emitted with `/en`.

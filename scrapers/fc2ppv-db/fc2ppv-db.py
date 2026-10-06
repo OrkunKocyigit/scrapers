@@ -457,6 +457,19 @@ def parse_video_page(html, page_url):
     if performers:
         scene["performers"] = performers
 
+    tags = []
+    seen_tags = set()
+    for anchor in parser.anchors:
+        if "/videos?tags=" not in anchor["href"]:
+            continue
+        name = anchor["text"].strip()
+        if not name or name in seen_tags:
+            continue
+        seen_tags.add(name)
+        tags.append({"name": name})
+    if tags:
+        scene["tags"] = tags
+
     return scene
 
 

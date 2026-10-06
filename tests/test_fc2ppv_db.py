@@ -291,8 +291,12 @@ class ParseVideoPageTests(unittest.TestCase):
     def test_details_contains_duration(self):
         self.assertIn("1:25:35", self.scene["details"])
 
-    def test_no_tags_key(self):
-        self.assertNotIn("tags", self.scene)
+    def test_tags(self):
+        names = [tag["name"] for tag in self.scene["tags"]]
+        self.assertEqual(names[0], "素人")
+        self.assertIn("中出し", names)
+        self.assertEqual(len(names), len(set(names)))
+        self.assertGreaterEqual(len(names), 10)
 
 
 class SceneByUrlTests(unittest.TestCase):
@@ -374,7 +378,6 @@ class VideoEdgeFixtureTests(unittest.TestCase):
         )
         self.assertIn("image", scene)
         self.assertNotIn("performers", scene)
-        self.assertNotIn("tags", scene)
 
     def test_4548515_missing_date_and_image_but_performer_has_face(self):
         scene = fc2ppv_db.parse_video_page(
@@ -389,6 +392,42 @@ class VideoEdgeFixtureTests(unittest.TestCase):
         self.assertIn("/actresses/", performer["url"])
         self.assertIn("faces/actress_", performer["image"])
         self.assertEqual(performer["images"], [performer["image"]])
+
+
+class TagTests(unittest.TestCase):
+    """Tag pills (/videos?tags=) map to ScrapedTag entries in page order."""
+
+    def test_4986793_all_tags_in_order(self):
+        scene = fc2ppv_db.parse_video_page(
+            fixture("video-4986793.html"),
+            "https://fc2ppv-db.com/en/videos/4986793",
+        )
+        self.assertEqual(
+            [tag["name"] for tag in scene["tags"]],
+            [
+                "痙攣",
+                "中出し",
+                "フェラ",
+                "長身",
+                "新人",
+                "色白",
+                "モデル",
+                "インフルエンサー",
+                "騎乗位",
+                "バック",
+                "クンニ",
+                "初撮り",
+                "スレンダー",
+                "神回",
+            ],
+        )
+
+    def test_4548515_has_no_tags(self):
+        scene = fc2ppv_db.parse_video_page(
+            fixture("video-4548515.html"),
+            "https://fc2ppv-db.com/en/videos/4548515",
+        )
+        self.assertNotIn("tags", scene)
 
 
 class DescriptionTests(unittest.TestCase):
