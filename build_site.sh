@@ -78,6 +78,7 @@ buildScraper()
 
 # find all yml files in ./scrapers - these are packages individually
 for f in ./scrapers/*.yml; do 
+    [ -e "$f" ] || continue
     buildScraper "$f"
 done
 
