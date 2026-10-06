@@ -619,6 +619,7 @@ class VideoEdgeFixtureTests(unittest.TestCase):
             fixture("video-4548515.html"), "https://fc2ppv-db.com/en/videos/4548515"
         )
         self.assertEqual(scene["code"], "FC2-PPV-4548515")
+        self.assertNotIn("title", scene)
         self.assertNotIn("date", scene)
         self.assertNotIn("image", scene)
         self.assertNotIn("studio", scene)
@@ -627,6 +628,14 @@ class VideoEdgeFixtureTests(unittest.TestCase):
         self.assertIn("/actresses/", performer["url"])
         self.assertIn("faces/actress_", performer["image"])
         self.assertEqual(performer["images"], [performer["image"]])
+
+    def test_3083211_untitled_omits_title(self):
+        scene = fc2ppv_db.parse_video_page(
+            fixture("video-3083211.html"),
+            "https://fc2ppv-db.com/en/videos/3083211",
+        )
+        self.assertEqual(scene["code"], "FC2-PPV-3083211")
+        self.assertNotIn("title", scene)
 
 
 class TagTests(unittest.TestCase):

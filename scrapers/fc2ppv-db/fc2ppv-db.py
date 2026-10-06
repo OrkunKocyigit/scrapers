@@ -462,7 +462,10 @@ def parse_video_page(html, page_url):
 
     prefix = re.compile(r"^FC2-PPV-{0}\s*".format(video_id), re.IGNORECASE)
     title = prefix.sub("", parser.h1, count=1).strip()
-    scene["title"] = title or code
+    # The site shows "FC2-PPV-{id}" as a placeholder for untitled videos; omit
+    # the field entirely then so Stash keeps the user's existing title.
+    if title and title.upper() != code.upper() and title != video_id:
+        scene["title"] = title
 
     date = None
     for index, paragraph in enumerate(parser.paragraphs):
