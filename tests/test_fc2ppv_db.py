@@ -6,6 +6,7 @@ module-level ``fetch_html`` are patched, and fixtures are read from
 """
 
 import importlib.util
+import io
 import json
 import os
 import subprocess
@@ -949,11 +950,78 @@ class CliSubprocessTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertTrue(result.stderr.strip())
 
-    def test_performer_fragment_without_url_exits_1(self):
+    def test_performer_fragment_without_url_reports_no_result(self):
         result = self._run(["performer-by-fragment"], '{"name": "なの(18)"}')
-        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIsNone(json.loads(result.stdout))
         self.assertIn("url", result.stderr.lower())
         self.assertNotIn("Traceback", result.stderr)
+
+    def test_scene_by_url_error_reports_no_result(self):
+        result = self._run(
+            ["scene-by-url"], '{"url": "https://example.com/en/videos/1234567"}'
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIsNone(json.loads(result.stdout))
+        self.assertIn("not a recognized", result.stderr.lower())
+
+
+class MainErrorTests(unittest.TestCase):
+    """Runtime errors must emit empty JSON and exit 0 (Stash reads stdout first)."""
+
+    def _run_main(self, args, stdin_text, side_effect=None):
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        patches = [
+            mock.patch.object(sys, "stdin", io.StringIO(stdin_text)),
+            mock.patch.object(sys, "stdout", stdout),
+            mock.patch.object(sys, "stderr", stderr),
+        ]
+        if side_effect is not None:
+            patches.append(
+                mock.patch.object(fc2ppv_db, "fetch_html", side_effect=side_effect)
+            )
+        for patcher in patches:
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        code = fc2ppv_db.main(["fc2ppv-db.py"] + args)
+        return code, stdout.getvalue(), stderr.getvalue()
+
+    def test_scene_error_emits_null(self):
+        code, out, err = self._run_main(
+            ["scene-by-url"],
+            '{"url": "https://fc2ppv-db.com/en/videos/635598"}',
+            side_effect=fc2ppv_db.ScraperError("boom"),
+        )
+        self.assertEqual(code, 0)
+        self.assertIsNone(json.loads(out))
+        self.assertIn("boom", err)
+
+    def test_list_error_emits_empty_list(self):
+        code, out, err = self._run_main(
+            ["scene-by-name"],
+            '{"name": "えりか"}',
+            side_effect=fc2ppv_db.ScraperError("boom"),
+        )
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(out), [])
+        self.assertIn("boom", err)
+
+    def test_unexpected_error_emits_null(self):
+        code, out, err = self._run_main(
+            ["scene-by-url"],
+            '{"url": "https://fc2ppv-db.com/en/videos/635598"}',
+            side_effect=RuntimeError("kaput"),
+        )
+        self.assertEqual(code, 0)
+        self.assertIsNone(json.loads(out))
+        self.assertIn("unexpected error", err)
+
+    def test_invalid_json_still_exits_1(self):
+        code, out, err = self._run_main(["scene-by-url"], "{not json")
+        self.assertEqual(code, 1)
+        self.assertEqual(out, "")
+        self.assertIn("invalid JSON", err)
 
 
 try:

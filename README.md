@@ -120,6 +120,10 @@ published scraper zip.
   invent fields.
 - **Some videos have no tags.** The site shows tag pills only when a video has them;
   older videos (e.g. `4548515`) return no `tags` key.
+- **Failures surface as "no results".** Stash reads the script's stdout before its exit
+  code, so runtime failures (video not found, FlareSolverr down, age gate, ...) emit an
+  empty result (`null`, or `[]` for the search operations) and log the reason to stderr,
+  which Stash shows as `[Scrape / fc2ppv-db] ...` in its logs.
 - **Cloudflare ASN block (error 1005).** Some networks/networks' ASNs are blocked by
   Cloudflare; the scraper reports this clearly but cannot work around it.
 - **Links use the `/en` locale.** Canonical scene/actress URLs are emitted with `/en`.

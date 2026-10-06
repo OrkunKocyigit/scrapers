@@ -924,6 +924,20 @@ OPERATIONS = {
     "performer-by-name": performer_by_name,
 }
 
+LIST_OPERATIONS = ("scene-by-name", "performer-by-name")
+
+
+def _empty_result(operation):
+    """Result emitted when an operation fails at runtime.
+
+    Stash decodes the script's stdout before it looks at the exit code, so
+    exiting non-zero without JSON surfaces as "could not unmarshal json from
+    script output: EOF" in the UI. Emitting an empty result instead makes Stash
+    report "no results", while the real reason stays visible in Stash's logs
+    through stderr (``[Scrape / fc2ppv-db] ...``).
+    """
+    return [] if operation in LIST_OPERATIONS else None
+
 
 def main(argv=None):
     argv = sys.argv if argv is None else argv
@@ -953,10 +967,10 @@ def main(argv=None):
         result = OPERATIONS[argv[1]](payload)
     except ScraperError as exc:
         print("fc2ppv-db: {0}".format(exc), file=sys.stderr)
-        return 1
+        result = _empty_result(argv[1])
     except Exception as exc:  # no traceback for CLI users
         print("fc2ppv-db: unexpected error: {0}".format(exc), file=sys.stderr)
-        return 1
+        result = _empty_result(argv[1])
 
     print(json.dumps(result, ensure_ascii=False))
     return 0
