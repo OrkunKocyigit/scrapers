@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# Local scraper configuration (user-specific)
+fc2ppv-db.ini
+
+# GSD runtime sentinel state
+.gsd/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Generated source-index build output
+_site/

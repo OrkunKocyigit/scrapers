@@ -1,0 +1,51 @@
+name: FC2PPV-DB
+sceneByURL:
+  - action: script
+    url: fc2ppv-db.com
+    script:
+      - python
+      - fc2ppv-db.py
+      - scene-by-url
+performerByURL:
+  - action: script
+    url: fc2ppv-db.com/en/actresses/
+    script:
+      - python
+      - fc2ppv-db.py
+      - performer-by-url
+  - action: script
+    url: fc2ppv-db.com/ja/actresses/
+    script:
+      - python
+      - fc2ppv-db.py
+      - performer-by-url
+  - action: script
+    url: fc2ppv-db.com/zh/actresses/
+    script:
+      - python
+      - fc2ppv-db.py
+      - performer-by-url
+sceneByFragment:
+  action: script
+  script:
+    - python
+    - fc2ppv-db.py
+    - scene-by-fragment
+sceneByQueryFragment:
+  action: script
+  script:
+    - python
+    - fc2ppv-db.py
+    - scene-by-query-fragment
+sceneByName:
+  action: script
+  script:
+    - python
+    - fc2ppv-db.py
+    - scene-by-name
+performerByFragment:
+  action: script
+  script:
+    - python
+    - fc2ppv-db.py
+    - performer-by-fragment
