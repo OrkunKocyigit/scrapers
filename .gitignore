@@ -8,6 +8,10 @@ venv/
 
 # Local scraper configuration (user-specific)
 fc2ppv-db.ini
+fc2cmadb.ini
+
+# Browser session captures (contain login credentials/cookies)
+*.har
 
 # GSD runtime sentinel state
 .gsd/

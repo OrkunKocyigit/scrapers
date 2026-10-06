@@ -1,0 +1,47 @@
+name: FC2CMADB
+sceneByURL:
+  - action: script
+    url:
+      - fc2cmadb.com
+    script:
+      - python
+      - fc2cmadb.py
+      - scene-by-url
+performerByURL:
+  - action: script
+    url:
+      - fc2cmadb.com/actresses/
+    script:
+      - python
+      - fc2cmadb.py
+      - performer-by-url
+performerByName:
+  action: script
+  script:
+    - python
+    - fc2cmadb.py
+    - performer-by-name
+sceneByFragment:
+  action: script
+  script:
+    - python
+    - fc2cmadb.py
+    - scene-by-fragment
+sceneByQueryFragment:
+  action: script
+  script:
+    - python
+    - fc2cmadb.py
+    - scene-by-query-fragment
+sceneByName:
+  action: script
+  script:
+    - python
+    - fc2cmadb.py
+    - scene-by-name
+performerByFragment:
+  action: script
+  script:
+    - python
+    - fc2cmadb.py
+    - performer-by-fragment
